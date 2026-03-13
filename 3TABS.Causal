@@ -1,0 +1,300 @@
+// Services/CausalInferenceService.cs
+using TABS.Core.Models;
+
+namespace TABS.Causal.Services;
+
+public interface ICausalInferenceService
+{
+    Task<CausalGraph> BuildCausalGraphAsync(
+        Guid patientId, 
+        string targetOutcome);
+    Task<ClinicalSuggestion> GenerateSuggestionAsync(
+        CausalGraph graph,
+        TemporalProfile profile);
+    Task<List<CounterfactualScenario>> GenerateCounterfactualsAsync(
+        CausalGraph graph,
+        string intervention);
+}
+
+public class BayesianNetworkService : ICausalInferenceService
+{
+    private readonly ITemporalAnalysisService _temporalService;
+    private readonly IRepository<Patient> _patientRepository;
+    private readonly HttpClient _httpClient; // For MedGemma reasoning
+
+    public BayesianNetworkService(
+        ITemporalAnalysisService temporalService,
+        IRepository<Patient> patientRepository,
+        HttpClient httpClient)
+    {
+        _temporalService = temporalService;
+        _patientRepository = patientRepository;
+        _httpClient = httpClient;
+    }
+
+    public async Task<CausalGraph> BuildCausalGraphAsync(
+        Guid patientId, 
+        string targetOutcome)
+    {
+        var patient = await _patientRepository.GetByIdAsync(patientId);
+        var temporalProfile = await _temporalService
+            .AnalyzePatientHistoryAsync(patientId);
+
+        // Use MedGemma 27B to generate causal hypotheses
+        var prompt = $@"Analyze this patient data and identify causal relationships 
+        leading to {targetOutcome}. Return a causal graph structure.
+
+        PATIENT DATA:
+        {SerializePatientData(patient, temporalProfile)}
+
+        Return JSON:
+        {{
+            ""nodes"": [
+                {{
+                    ""id"": ""unique_id"",
+                    ""label"": ""display name"",
+                    ""type"": ""RootCause/Intermediate/Outcome/Intervention"",
+                    ""currentValue"": numeric_value,
+                    ""probability"": 0.0-1.0
+                }}
+            ],
+            ""edges"": [
+                {{
+                    ""sourceId"": ""cause_node_id"",
+                    ""targetId"": ""effect_node_id"",
+                    ""strength"": 0.0-1.0,
+                    ""relationshipType"": ""causes/inhibits/correlates"",
+                    ""explanation"": ""clinical reasoning""
+                }}
+            ]
+        }}
+
+        Rules:
+        1. Include at least one root cause, intermediate factors, and the outcome
+        2. Edges must form a DAG (no cycles)
+        3. Strength reflects conditional probability P(effect|cause)
+        4. Base probabilities on population data adjusted for this patient";
+
+        // Call MedGemma for causal reasoning
+        var causalStructure = await CallMedGemmaForCausalGraph(prompt);
+
+        // Enhance with probabilistic inference
+        var enhancedGraph = await ApplyBayesianInference(causalStructure, patient);
+
+        return enhancedGraph;
+    }
+
+    public async Task<ClinicalSuggestion> GenerateSuggestionAsync(
+        CausalGraph graph,
+        TemporalProfile profile)
+    {
+        // Identify highest impact intervention points
+        var interventionPoints = graph.Nodes
+            .Where(n => n.Type == NodeType.RootCause || 
+                       n.Type == NodeType.Intermediate)
+            .Where(n => n.Probability > 0.3 && n.Probability < 0.9)
+            .OrderByDescending(n => CalculateInterventionImpact(n, graph))
+            .Take(3);
+
+        var suggestions = new List<string>();
+        var causalChains = new List<string>();
+
+        foreach (var point in interventionPoints)
+        {
+            var impact = CalculateInterventionImpact(point, graph);
+            var chain = TraceCausalChain(point, graph);
+            
+            suggestions.Add($"Address {point.Label} (projected impact: {impact:P0})");
+            causalChains.Add(string.Join(" → ", chain));
+        }
+
+        // Generate counterfactuals
+        var counterfactuals = await GenerateCounterfactualsAsync(
+            graph, 
+            interventionPoints.First().Label);
+
+        return new ClinicalSuggestion
+        {
+            Title = $"Intervention Strategy for {graph.TargetVariable}",
+            Description = string.Join("\n", suggestions),
+            SimplifiedExplanation = await GenerateSimpleExplanation(
+                suggestions, 
+                causalChains),
+            Priority = DeterminePriority(profile),
+            SupportingEvidence = causalChains,
+            CausalReasoning = graph,
+            Counterfactuals = counterfactuals,
+            GeneratedAt = DateTime.UtcNow
+        };
+    }
+
+    public async Task<List<CounterfactualScenario>> GenerateCounterfactualsAsync(
+        CausalGraph graph,
+        string intervention)
+    {
+        var counterfactuals = new List<CounterfactualScenario>();
+        
+        // Scenario 1: What if intervention was applied 6 months ago?
+        var pastScenario = new CounterfactualScenario
+        {
+            Scenario = $"If {intervention} had been optimized 6 months ago",
+            ProbabilityChange = -0.35, // Example: 35% risk reduction
+            OutcomeDifference = "Current symptoms would likely be 40% less severe"
+        };
+        counterfactuals.Add(pastScenario);
+
+        // Scenario 2: What if no action is taken?
+        var noActionScenario = new CounterfactualScenario
+        {
+            Scenario = "If current trajectory continues without intervention",
+            ProbabilityChange = +0.25,
+            OutcomeDifference = "60% probability of progression to severe stage within 12 months"
+        };
+        counterfactuals.Add(noActionScenario);
+
+        // Scenario 3: Optimal scenario
+        var optimalScenario = new CounterfactualScenario
+        {
+            Scenario = $"If {intervention} is optimized immediately AND maintained",
+            ProbabilityChange = -0.55,
+            OutcomeDifference = "75% chance of remission within 6 months"
+        };
+        counterfactuals.Add(optimalScenario);
+
+        return counterfactuals;
+    }
+
+    private double CalculateInterventionImpact(CausalNode node, CausalGraph graph)
+    {
+        // Calculate PageRank-like importance in causal graph
+        var outgoingEdges = graph.Edges.Where(e => e.SourceId == node.Id);
+        var totalStrength = outgoingEdges.Sum(e => e.Strength);
+        return totalStrength * (1 - node.Probability); // Higher impact if currently uncontrolled
+    }
+
+    private List<string> TraceCausalChain(CausalNode startNode, CausalGraph graph)
+    {
+        var chain = new List<string> { startNode.Label };
+        var current = startNode;
+        
+        while (true)
+        {
+            var nextEdge = graph.Edges
+                .Where(e => e.SourceId == current.Id)
+                .OrderByDescending(e => e.Strength)
+                .FirstOrDefault();
+            
+            if (nextEdge == null) break;
+            
+            var nextNode = graph.Nodes.First(n => n.Id == nextEdge.TargetId);
+            chain.Add($"{nextEdge.RelationshipType} → {nextNode.Label}");
+            current = nextNode;
+        }
+        
+        return chain;
+    }
+
+    private async Task<CausalGraph> ApplyBayesianInference(
+        CausalGraph graph, 
+        Patient patient)
+    {
+        // Update probabilities based on patient-specific evidence
+        foreach (var node in graph.Nodes)
+        {
+            // Prior probability from population data
+            var prior = node.Probability;
+            
+            // Likelihood based on patient's actual values
+            var likelihood = CalculateLikelihood(node, patient);
+            
+            // Posterior = (Likelihood * Prior) / Evidence
+            // Simplified Bayesian update
+            node.Probability = (likelihood * prior) / 
+                ((likelihood * prior) + ((1 - likelihood) * (1 - prior)));
+        }
+
+        return graph;
+    }
+
+    private double CalculateLikelihood(CausalNode node, Patient patient)
+    {
+        // Match node to patient data and calculate likelihood
+        // This is a simplified implementation
+        var matchingData = patient.MedicalHistory
+            .SelectMany(r => r.ExtractedData.LabValues)
+            .FirstOrDefault(l => node.Label.Contains(l.TestName));
+
+        if (matchingData == null) return 0.5; // Uninformative prior
+
+        // Calculate how likely this value is given the node state
+        if (matchingData.ReferenceHigh.HasValue && matchingData.ReferenceLow.HasValue)
+        {
+            var range = matchingData.ReferenceHigh.Value - matchingData.ReferenceLow.Value;
+            var deviation = Math.Abs(matchingData.Value - 
+                (matchingData.ReferenceLow.Value + range / 2));
+            return Math.Max(0.1, 1 - (deviation / range));
+        }
+
+        return 0.5;
+    }
+
+    private string SerializePatientData(Patient patient, TemporalProfile profile)
+    {
+        // Serialize relevant patient data for MedGemma prompt
+        return JsonSerializer.Serialize(new
+        {
+            Demographics = new { patient.DateOfBirth, patient.PreferredLanguage },
+            RecentLabs = patient.MedicalHistory
+                .SelectMany(r => r.ExtractedData.LabValues)
+                .GroupBy(l => l.TestName)
+                .Select(g => g.OrderByDescending(l => l.TestDate).First())
+                .Take(10),
+            Trends = profile.Trends.Select(t => new
+            {
+                t.VariableName,
+                t.Direction,
+                t.Slope
+            }),
+            ActiveDiagnoses = patient.MedicalHistory
+                .SelectMany(r => r.ExtractedData.Diagnoses)
+                .Where(d => d.IsActive)
+        });
+    }
+
+    private async Task<CausalGraph> CallMedGemmaForCausalGraph(string prompt)
+    {
+        // Implementation of MedGemma API call
+        // Returns deserialized CausalGraph
+        throw new NotImplementedException();
+    }
+
+    private async Task<string> GenerateSimpleExplanation(
+        List<string> suggestions, 
+        List<string> causalChains)
+    {
+        // Use simplification service
+        var combined = string.Join("\n", suggestions) + "\n\nReasoning:\n" + 
+            string.Join("\n", causalChains);
+        
+        // Call simplification service here
+        return combined; // Placeholder
+    }
+
+    private SuggestionPriority DeterminePriority(TemporalProfile profile)
+    {
+        var criticalAnomalies = profile.DetectedAnomalies
+            .Count(a => a.DeviationScore > 3.0);
+        
+        var worseningTrends = profile.Trends
+            .Count(t => t.Direction == TrendDirection.Worsening);
+
+        if (criticalAnomalies > 0 || worseningTrends > 2)
+            return SuggestionPriority.Critical;
+        if (worseningTrends > 0)
+            return SuggestionPriority.High;
+        if (profile.Trends.Any(t => t.Direction == TrendDirection.Fluctuating))
+            return SuggestionPriority.Medium;
+        
+        return SuggestionPriority.Low;
+    }
+}

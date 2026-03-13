@@ -1,0 +1,267 @@
+// Services/TemporalAnalysisService.cs
+using TABS.Core.Models;
+
+namespace TABS.Temporal.Services;
+
+public interface ITemporalAnalysisService
+{
+    Task<TemporalProfile> AnalyzePatientHistoryAsync(Guid patientId);
+    Task<List<Anomaly>> DetectAnomaliesAsync(
+        List<DataPoint> timeSeries, 
+        string variableName);
+    Task<Trajectory> PredictTrajectoryAsync(
+        List<DataPoint> historicalData,
+        string variableName,
+        int daysAhead = 90);
+}
+
+public class DynamicBayesianNetworkService : ITemporalAnalysisService
+{
+    private readonly IRepository<MedicalRecord> _recordRepository;
+    private readonly ILogger<DynamicBayesianNetworkService> _logger;
+
+    public DynamicBayesianNetworkService(
+        IRepository<MedicalRecord> recordRepository,
+        ILogger<DynamicBayesianNetworkService> logger)
+    {
+        _recordRepository = recordRepository;
+        _logger = logger;
+    }
+
+    public async Task<TemporalProfile> AnalyzePatientHistoryAsync(Guid patientId)
+    {
+        var records = await _recordRepository
+            .GetAllAsync(r => r.PatientId == patientId);
+        
+        var profile = new TemporalProfile();
+        
+        // Group by test type and analyze trends
+        var labGroups = records
+            .SelectMany(r => r.ExtractedData.LabValues)
+            .GroupBy(l => l.NormalizedName);
+
+        foreach (var group in labGroups)
+        {
+            var timeSeries = group
+                .OrderBy(l => l.TestDate)
+                .Select(l => new DataPoint
+                {
+                    Timestamp = l.TestDate,
+                    Value = l.Value
+                }).ToList();
+
+            if (timeSeries.Count < 2) continue;
+
+            var trend = AnalyzeTrend(timeSeries, group.Key);
+            profile.Trends.Add(trend);
+
+            var anomalies = await DetectAnomaliesAsync(timeSeries, group.Key);
+            profile.DetectedAnomalies.AddRange(anomalies);
+
+            // Predict future trajectory
+            var trajectory = await PredictTrajectoryAsync(timeSeries, group.Key);
+            profile.Trajectories[group.Key] = trajectory;
+        }
+
+        return profile;
+    }
+
+    private TemporalTrend AnalyzeTrend(List<DataPoint> data, string variableName)
+    {
+        // Linear regression for trend detection
+        var n = data.Count;
+        var sumX = data.Select((d, i) => (double)i).Sum();
+        var sumY = data.Sum(d => d.Value);
+        var sumXY = data.Select((d, i) => (double)i * d.Value).Sum();
+        var sumX2 = data.Select((d, i) => (double)i * i).Sum();
+
+        var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        var intercept = (sumY - slope * sumX) / n;
+
+        // Calculate volatility (standard deviation of residuals)
+        var predicted = data.Select((d, i) => slope * i + intercept).ToList();
+        var residuals = data.Select((d, i) => d.Value - predicted[i]).ToList();
+        var volatility = CalculateStdDev(residuals);
+
+        // Determine direction
+        var direction = slope switch
+        {
+            > 0.1 => TrendDirection.Worsening, // Assuming higher is worse for most markers
+            < -0.1 => TrendDirection.Improving,
+            _ when volatility > 0.2 => TrendDirection.Fluctuating,
+            _ => TrendDirection.Stable
+        };
+
+        // Adjust for specific markers where lower is worse
+        if (IsInverseMarker(variableName))
+        {
+            direction = direction switch
+            {
+                TrendDirection.Improving => TrendDirection.Worsening,
+                TrendDirection.Worsening => TrendDirection.Improving,
+                _ => direction
+            };
+        }
+
+        return new TemporalTrend
+        {
+            VariableName = variableName,
+            Direction = direction,
+            Slope = slope,
+            Volatility = volatility,
+            WindowStart = data.First().Timestamp,
+            WindowEnd = data.Last().Timestamp,
+            DataPoints = data
+        };
+    }
+
+    public async Task<List<Anomaly>> DetectAnomaliesAsync(
+        List<DataPoint> timeSeries, 
+        string variableName)
+    {
+        var anomalies = new List<Anomaly>();
+        
+        if (timeSeries.Count < 3) return anomalies;
+
+        // Z-score based anomaly detection
+        var mean = timeSeries.Average(d => d.Value);
+        var stdDev = CalculateStdDev(timeSeries.Select(d => d.Value));
+
+        for (int i = 0; i < timeSeries.Count; i++)
+        {
+            var point = timeSeries[i];
+            var zScore = Math.Abs((point.Value - mean) / stdDev);
+            
+            if (zScore > 2.5) // 99% confidence
+            {
+                anomalies.Add(new Anomaly
+                {
+                    VariableName = variableName,
+                    Timestamp = point.Timestamp,
+                    ActualValue = point.Value,
+                    ExpectedValue = mean,
+                    DeviationScore = zScore,
+                    Explanation = GenerateAnomalyExplanation(
+                        variableName, 
+                        point.Value, 
+                        mean, 
+                        zScore)
+                });
+            }
+        }
+
+        // Change point detection (simplified)
+        for (int i = 1; i < timeSeries.Count; i++)
+        {
+            var prevAvg = timeSeries.Take(i).Average(d => d.Value);
+            var currAvg = timeSeries.Skip(i).Average(d => d.Value);
+            var changeMagnitude = Math.Abs(currAvg - prevAvg) / prevAvg;
+
+            if (changeMagnitude > 0.3) // 30% change
+            {
+                anomalies.Add(new Anomaly
+                {
+                    VariableName = $"{variableName}_changepoint",
+                    Timestamp = timeSeries[i].Timestamp,
+                    ActualValue = currAvg,
+                    ExpectedValue = prevAvg,
+                    DeviationScore = changeMagnitude,
+                    Explanation = $"Significant change detected at {timeSeries[i].Timestamp:d}. " +
+                                 $"Value shifted from {prevAvg:F2} to {currAvg:F2}."
+                });
+            }
+        }
+
+        return anomalies;
+    }
+
+    public async Task<Trajectory> PredictTrajectoryAsync(
+        List<DataPoint> historicalData,
+        string variableName,
+        int daysAhead = 90)
+    {
+        // Simple Bayesian Linear Regression for prediction
+        // In production, use more sophisticated models (ARIMA, Prophet, or ML)
+        
+        var lastDate = historicalData.Last().Timestamp;
+        var trend = AnalyzeTrend(historicalData, variableName);
+        
+        var predictions = new List<PredictedState>();
+        var currentValue = historicalData.Last().Value;
+        
+        // Bayesian updating of confidence
+        var confidence = CalculatePredictionConfidence(historicalData);
+        
+        for (int day = 1; day <= daysAhead; day += 30) // Monthly predictions
+        {
+            var projectedDate = lastDate.AddDays(day);
+            var projectedValue = currentValue + (trend.Slope * day);
+            
+            // Add uncertainty growth over time
+            var uncertainty = trend.Volatility * Math.Sqrt(day / 30.0);
+            var probability = Math.Max(0, 1 - (uncertainty / projectedValue));
+
+            predictions.Add(new PredictedState
+            {
+                ProjectedDate = projectedDate,
+                ExpectedValue = projectedValue,
+                Probability = probability,
+                ContributingFactors = new List<string>
+                {
+                    $"Historical trend: {trend.Direction}",
+                    $"Volatility: {trend.Volatility:F2}",
+                    $"Data points: {historicalData.Count}"
+                }
+            });
+        }
+
+        return new Trajectory
+        {
+            VariableName = variableName,
+            PredictedStates = predictions,
+            Confidence = confidence
+        };
+    }
+
+    private double CalculatePredictionConfidence(List<DataPoint> data)
+    {
+        // More data = higher confidence, lower volatility = higher confidence
+        var n = Math.Min(data.Count / 10.0, 1.0); // Max at 10 points
+        var consistency = 1.0 / (1.0 + CalculateStdDev(data.Select(d => d.Value)));
+        return (n * 0.6) + (consistency * 0.4);
+    }
+
+    private double CalculateStdDev(IEnumerable<double> values)
+    {
+        var list = values.ToList();
+        var avg = list.Average();
+        return Math.Sqrt(list.Average(v => Math.Pow(v - avg, 2)));
+    }
+
+    private bool IsInverseMarker(string variableName)
+    {
+        var inverseMarkers = new[] { "hdl", "vitamin_d", "iron", "albumin" };
+        return inverseMarkers.Any(m => 
+            variableName.ToLower().Contains(m));
+    }
+
+    private string GenerateAnomalyExplanation(
+        string variable, 
+        double actual, 
+        double expected, 
+        double zScore)
+    {
+        var severity = zScore switch
+        {
+            > 3.5 => "critically abnormal",
+            > 2.5 => "significantly abnormal",
+            _ => "moderately abnormal"
+        };
+
+        var direction = actual > expected ? "elevated" : "depressed";
+        
+        return $"{variable} is {severity} ({direction}). " +
+               $"Expected: {expected:F2}, Actual: {actual:F2}. " +
+               $"Deviation: {zScore:F1} standard deviations.";
+    }
+}

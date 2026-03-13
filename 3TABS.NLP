@@ -1,0 +1,111 @@
+// Services/MedicalSimplificationService.cs
+using TABS.Core.Models;
+
+namespace TABS.NLP.Services;
+
+public interface ISimplificationService
+{
+    Task<SimplifiedExplanation> SimplifyMedicalContentAsync(
+        string medicalText, 
+        string targetLanguage = "en",
+        int readingLevel = 8); // Flesch-Kincaid grade level
+}
+
+public class MedGemmaSimplificationService : ISimplificationService
+{
+    private readonly HttpClient _httpClient;
+    private readonly string _endpoint;
+
+    public MedGemmaSimplificationService(HttpClient httpClient, IConfiguration config)
+    {
+        _httpClient = httpClient;
+        _endpoint = config["MedGemma:Endpoint"] 
+            ?? "http://localhost:8080/v1/chat/completions";
+    }
+
+    public async Task<SimplifiedExplanation> SimplifyMedicalContentAsync(
+        string medicalText, 
+        string targetLanguage = "en",
+        int readingLevel = 8)
+    {
+        var languageNames = new Dictionary<string, string>
+        {
+            ["en"] = "English",
+            ["es"] = "Spanish",
+            ["fr"] = "French",
+            ["de"] = "German",
+            ["zh"] = "Chinese",
+            ["hi"] = "Hindi",
+            ["ar"] = "Arabic"
+        };
+
+        var targetLang = languageNames.GetValueOrDefault(targetLanguage, "English");
+
+        var prompt = $@"You are a medical communication specialist. Translate this medical content into simple {targetLang} that a {readingLevel}th-grade student can understand.
+
+        MEDICAL CONTENT:
+        {medicalText}
+
+        Provide your response in this JSON structure:
+        {{
+            ""originalText"": ""original medical text"",
+            ""simplifiedText"": ""easy to understand explanation"",
+            ""keyTerms"": [
+                {{
+                    ""term"": ""medical term"",
+                    ""simpleDefinition"": ""layman explanation"",
+                    ""analogy"": ""everyday analogy to help understanding""
+                }}
+            ],
+            ""actionItems"": [
+                ""specific actions the patient should take""
+            ],
+            ""redFlags"": [
+                ""symptoms that require immediate attention""
+            ],
+            ""confidence"": 0.0-1.0
+        }}
+
+        Guidelines:
+        1. Use analogies (e.g., 'insulin is like a key that opens cells for sugar')
+        2. Avoid medical jargon unless explained
+        3. Be empathetic but accurate
+        4. Highlight urgent information clearly
+        5. Maintain clinical accuracy while simplifying";
+
+        var request = new
+        {
+            model = "medgemma-27b-text",
+            messages = new[]
+            {
+                new { role = "system", content = "You are an expert medical communicator specializing in health literacy." },
+                new { role = "user", content = prompt }
+            },
+            temperature = 0.3,
+            response_format = new { type = "json_object" }
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(_endpoint, request);
+        var result = await response.Content.ReadFromJsonAsync<MedGemmaResponse>();
+        
+        return JsonSerializer.Deserialize<SimplifiedExplanation>(
+            result.Choices[0].Message.Content);
+    }
+}
+
+public class SimplifiedExplanation
+{
+    public string OriginalText { get; set; } = string.Empty;
+    public string SimplifiedText { get; set; } = string.Empty;
+    public List<KeyTerm> KeyTerms { get; set; } = new();
+    public List<string> ActionItems { get; set; } = new();
+    public List<string> RedFlags { get; set; } = new();
+    public double Confidence { get; set; }
+}
+
+public class KeyTerm
+{
+    public string Term { get; set; } = string.Empty;
+    public string SimpleDefinition { get; set; } = string.Empty;
+    public string Analogy { get; set; } = string.Empty;
+}

@@ -1,0 +1,285 @@
+// Services/MedGemmaOCRService.cs
+using System.Text.Json;
+using TABS.Core.Models;
+
+namespace TABS.OCR.Services;
+
+public interface IOCRService
+{
+    Task<ExtractionResult> ExtractMedicalDataAsync(Stream imageStream, string contentType);
+    Task<ExtractionResult> ExtractFromTextAsync(string rawText);
+}
+
+public class MedGemmaOCRService : IOCRService
+{
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<MedGemmaOCRService> _logger;
+    private readonly string _medGemmaEndpoint;
+
+    public MedGemmaOCRService(
+        HttpClient httpClient, 
+        IConfiguration config,
+        ILogger<MedGemmaOCRService> logger)
+    {
+        _httpClient = httpClient;
+        _logger = logger;
+        _medGemmaEndpoint = config["MedGemma:Endpoint"] 
+            ?? "http://localhost:8080/v1/chat/completions";
+    }
+
+    public async Task<ExtractionResult> ExtractMedicalDataAsync(
+        Stream imageStream, 
+        string contentType)
+    {
+        // Convert image to base64
+        using var ms = new MemoryStream();
+        await imageStream.CopyToAsync(ms);
+        var base64Image = Convert.ToBase64String(ms.ToArray());
+        
+        var imageUrl = $"data:{contentType};base64,{base64Image}";
+
+        // MedGemma 4B Multimodal Prompt
+        var prompt = @"You are a medical document analysis AI. Extract structured data from this medical image.
+        
+        Analyze the image and return ONLY a JSON object with this exact structure:
+        {
+            ""patientInfo"": {
+                ""name"": ""extracted name or null"",
+                ""age"": number or null,
+                ""gender"": ""M/F/Other or null""
+            },
+            ""labValues"": [
+                {
+                    ""testName"": ""exact test name"",
+                    ""normalizedName"": ""standardized LOINC name"",
+                    ""value"": numeric value,
+                    ""unit"": ""measurement unit"",
+                    ""referenceRange"": ""normal range string"",
+                    ""referenceLow"": number or null,
+                    ""referenceHigh"": number or null,
+                    ""date"": ""YYYY-MM-DD"",
+                    ""abnormalFlag"": ""H/L/N""
+                }
+            ],
+            ""medications"": [
+                {
+                    ""name"": ""medication name"",
+                    ""dosage"": ""dosage info"",
+                    ""frequency"": ""how often"",
+                    ""startDate"": ""YYYY-MM-DD or null""
+                }
+            ],
+            ""diagnoses"": [
+                {
+                    ""code"": ""ICD-10 code or null"",
+                    ""description"": ""diagnosis description"",
+                    ""date"": ""YYYY-MM-DD or null""
+                }
+            ],
+            ""confidence"": 0.0-1.0
+        }
+
+        Rules:
+        1. Normalize all test names to standard medical terminology
+        2. Convert all dates to ISO 8601 format
+        3. Extract numeric values only, remove units from value field
+        4. Flag abnormal values based on reference ranges
+        5. If information is unclear, use null rather than guess
+        6. Confidence score reflects overall extraction certainty";
+
+        var request = new
+        {
+            model = "medgemma-4b-multimodal",
+            messages = new[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "text", text = prompt },
+                        new { type = "image_url", image_url = new { url = imageUrl } }
+                    }
+                }
+            },
+            temperature = 0.1, // Low temp for deterministic extraction
+            max_tokens = 4096,
+            response_format = new { type = "json_object" }
+        };
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                _medGemmaEndpoint, 
+                request);
+            
+            response.EnsureSuccessStatusCode();
+            
+            var result = await response.Content
+                .ReadFromJsonAsync<MedGemmaResponse>();
+            
+            var extractedData = JsonSerializer.Deserialize<ExtractedMedicalData>(
+                result.Choices[0].Message.Content);
+
+            return new ExtractionResult
+            {
+                Success = true,
+                StructuredData = MapToStructuredData(extractedData),
+                ConfidenceScore = extractedData.Confidence,
+                RawExtraction = result.Choices[0].Message.Content,
+                ProcessingTimeMs = result.Usage.TotalTime
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "OCR extraction failed");
+            return new ExtractionResult 
+            { 
+                Success = false, 
+                ErrorMessage = ex.Message 
+            };
+        }
+    }
+
+    public async Task<ExtractionResult> ExtractFromTextAsync(string rawText)
+    {
+        // Fallback for text-based extraction using MedGemma 27B
+        var prompt = $@"Extract structured medical data from this text:
+        
+        {rawText}
+        
+        Return JSON with the same structure as medical image analysis.";
+
+        var request = new
+        {
+            model = "medgemma-27b-text",
+            messages = new[]
+            {
+                new { role = "user", content = prompt }
+            },
+            temperature = 0.1,
+            response_format = new { type = "json_object" }
+        };
+
+        // ... similar implementation
+        throw new NotImplementedException();
+    }
+
+    private StructuredData MapToStructuredData(ExtractedMedicalData data)
+    {
+        // Mapping logic here
+        return new StructuredData
+        {
+            LabValues = data.LabValues.Select(l => new LabValue
+            {
+                TestName = l.TestName,
+                NormalizedName = l.NormalizedName,
+                Value = l.Value,
+                Unit = l.Unit,
+                ReferenceLow = l.ReferenceLow,
+                ReferenceHigh = l.ReferenceHigh,
+                TestDate = DateTime.Parse(l.Date),
+                Interpretation = l.AbnormalFlag switch
+                {
+                    "H" => "High",
+                    "L" => "Low",
+                    _ => "Normal"
+                }
+            }).ToList(),
+            Medications = data.Medications.Select(m => new Medication
+            {
+                Name = m.Name,
+                Dosage = m.Dosage,
+                Frequency = m.Frequency,
+                StartDate = string.IsNullOrEmpty(m.StartDate) 
+                    ? DateTime.Now 
+                    : DateTime.Parse(m.StartDate)
+            }).ToList(),
+            Diagnoses = data.Diagnoses.Select(d => new Diagnosis
+            {
+                Code = d.Code ?? "Unknown",
+                Description = d.Description,
+                DateDiagnosed = string.IsNullOrEmpty(d.Date) 
+                    ? DateTime.Now 
+                    : DateTime.Parse(d.Date),
+                IsActive = true
+            }).ToList()
+        };
+    }
+}
+
+public class ExtractionResult
+{
+    public bool Success { get; set; }
+    public StructuredData StructuredData { get; set; } = new();
+    public double ConfidenceScore { get; set; }
+    public string RawExtraction { get; set; } = string.Empty;
+    public long ProcessingTimeMs { get; set; }
+    public string ErrorMessage { get; set; } = string.Empty;
+}
+
+// DTOs for MedGemma API
+public class MedGemmaResponse
+{
+    public List<Choice> Choices { get; set; } = new();
+    public UsageInfo Usage { get; set; } = new();
+}
+
+public class Choice
+{
+    public Message Message { get; set; } = new();
+}
+
+public class Message
+{
+    public string Content { get; set; } = string.Empty;
+}
+
+public class UsageInfo
+{
+    public long TotalTime { get; set; }
+}
+
+public class ExtractedMedicalData
+{
+    public PatientInfo PatientInfo { get; set; } = new();
+    public List<ExtractedLabValue> LabValues { get; set; } = new();
+    public List<ExtractedMedication> Medications { get; set; } = new();
+    public List<ExtractedDiagnosis> Diagnoses { get; set; } = new();
+    public double Confidence { get; set; }
+}
+
+public class PatientInfo
+{
+    public string Name { get; set; } = string.Empty;
+    public int? Age { get; set; }
+    public string Gender { get; set; } = string.Empty;
+}
+
+public class ExtractedLabValue
+{
+    public string TestName { get; set; } = string.Empty;
+    public string NormalizedName { get; set; } = string.Empty;
+    public double Value { get; set; }
+    public string Unit { get; set; } = string.Empty;
+    public string ReferenceRange { get; set; } = string.Empty;
+    public double? ReferenceLow { get; set; }
+    public double? ReferenceHigh { get; set; }
+    public string Date { get; set; } = string.Empty;
+    public string AbnormalFlag { get; set; } = string.Empty;
+}
+
+public class ExtractedMedication
+{
+    public string Name { get; set; } = string.Empty;
+    public string Dosage { get; set; } = string.Empty;
+    public string Frequency { get; set; } = string.Empty;
+    public string StartDate { get; set; } = string.Empty;
+}
+
+public class ExtractedDiagnosis
+{
+    public string Code { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Date { get; set; } = string.Empty;
+}

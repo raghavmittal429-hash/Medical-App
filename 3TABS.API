@@ -1,0 +1,184 @@
+// Program.cs
+using TABS.OCR.Services;
+using TABS.NLP.Services;
+using TABS.Temporal.Services;
+using TABS.Causal.Services;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// Register 3TABS services
+builder.Services.AddHttpClient<IOCRService, MedGemmaOCRService>();
+builder.Services.AddHttpClient<ISimplificationService, MedGemmaSimplificationService>();
+builder.Services.AddScoped<ITemporalAnalysisService, DynamicBayesianNetworkService>();
+builder.Services.AddScoped<ICausalInferenceService, BayesianNetworkService>();
+
+// CORS for Blazor frontend
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowBlazor", policy =>
+    {
+        policy.WithOrigins("http://localhost:5001")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+app.UseCors("AllowBlazor");
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+
+// Controllers/PatientsController.cs
+using Microsoft.AspNetCore.Mvc;
+using TABS.Core.Models;
+using TABS.OCR.Services;
+using TABS.NLP.Services;
+using TABS.Temporal.Services;
+using TABS.Causal.Services;
+
+namespace TABS.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class PatientsController : ControllerBase
+{
+    private readonly IOCRService _ocrService;
+    private readonly ISimplificationService _simplificationService;
+    private readonly ITemporalAnalysisService _temporalService;
+    private readonly ICausalInferenceService _causalService;
+    private readonly ILogger<PatientsController> _logger;
+
+    public PatientsController(
+        IOCRService ocrService,
+        ISimplificationService simplificationService,
+        ITemporalAnalysisService temporalService,
+        ICausalInferenceService causalService,
+        ILogger<PatientsController> logger)
+    {
+        _ocrService = ocrService;
+        _simplificationService = simplificationService;
+        _temporalService = temporalService;
+        _causalService = causalService;
+        _logger = logger;
+    }
+
+    [HttpPost("{patientId}/upload")]
+    public async Task<ActionResult<MedicalRecord>> UploadDocument(
+        Guid patientId,
+        IFormFile file)
+    {
+        try
+        {
+            using var stream = file.OpenReadStream();
+            var result = await _ocrService.ExtractMedicalDataAsync(
+                stream, 
+                file.ContentType);
+
+            if (!result.Success)
+                return BadRequest(new { error = result.ErrorMessage });
+
+            var record = new MedicalRecord
+            {
+                PatientId = patientId,
+                RecordDate = DateTime.UtcNow,
+                Type = DetectRecordType(file.FileName),
+                RawContent = result.RawExtraction,
+                ExtractedData = result.StructuredData,
+                ConfidenceScore = result.ConfidenceScore
+            };
+
+            // Save to database (implement repository)
+            // await _recordRepository.AddAsync(record);
+
+            return Ok(record);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Upload failed");
+            return StatusCode(500, "Processing failed");
+        }
+    }
+
+    [HttpGet("{patientId}/temporal-analysis")]
+    public async Task<ActionResult<TemporalProfile>> GetTemporalAnalysis(Guid patientId)
+    {
+        var profile = await _temporalService.AnalyzePatientHistoryAsync(patientId);
+        return Ok(profile);
+    }
+
+    [HttpGet("{patientId}/causal-graph")]
+    public async Task<ActionResult<CausalGraph>> GetCausalGraph(
+        Guid patientId,
+        [FromQuery] string target = "current_condition")
+    {
+        var graph = await _causalService.BuildCausalGraphAsync(patientId, target);
+        return Ok(graph);
+    }
+
+    [HttpGet("{patientId}/suggestions")]
+    public async Task<ActionResult<ClinicalSuggestion>> GetSuggestions(Guid patientId)
+    {
+        var temporalProfile = await _temporalService
+            .AnalyzePatientHistoryAsync(patientId);
+        var causalGraph = await _causalService
+            .BuildCausalGraphAsync(patientId, "health_optimization");
+        
+        var suggestion = await _causalService
+            .GenerateSuggestionAsync(causalGraph, temporalProfile);
+        
+        // Simplify for patient
+        var simplified = await _simplificationService
+            .SimplifyMedicalContentAsync(
+                suggestion.Description,
+                targetLanguage: "en");
+
+        suggestion.SimplifiedExplanation = simplified.SimplifiedText;
+        
+        return Ok(suggestion);
+    }
+
+    [HttpPost("simplify")]
+    public async Task<ActionResult<SimplifiedExplanation>> SimplifyText(
+        [FromBody] SimplifyRequest request)
+    {
+        var result = await _simplificationService.SimplifyMedicalContentAsync(
+            request.Text,
+            request.Language,
+            request.ReadingLevel);
+        
+        return Ok(result);
+    }
+
+    private RecordType DetectRecordType(string filename)
+    {
+        var lower = filename.ToLower();
+        if (lower.Contains("lab")) return RecordType.LabReport;
+        if (lower.Contains("prescription") || lower.Contains("rx")) 
+            return RecordType.Prescription;
+        if (lower.Contains("xray") || lower.Contains("scan") || lower.Contains("mri")) 
+            return RecordType.Imaging;
+        return RecordType.ClinicalNotes;
+    }
+}
+
+public class SimplifyRequest
+{
+    public string Text { get; set; } = string.Empty;
+    public string Language { get; set; } = "en";
+    public int ReadingLevel { get; set; } = 8;
+}

@@ -1,0 +1,278 @@
+// Pages/Index.razor
+@page "/"
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div class="container mt-4">
+    <h1 class="mb-4">🩺 3TABS: Temporal Analysis & Bayesian System</h1>
+    
+    <!-- Upload Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Upload Medical Document</h5>
+        </div>
+        <div class="card-body">
+            <InputFile OnChange="@LoadFiles" class="form-control" accept=".pdf,.jpg,.png" />
+            @if (isUploading)
+            {
+                <div class="mt-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Processing...</span>
+                    </div>
+                    <span class="ms-2">Analyzing with MedGemma...</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (extractedData != null)
+    {
+        <!-- Extracted Data -->
+        <div class="card mb-4 border-success">
+            <div class="card-header bg-success text-white">
+                <h5>📋 Extracted Data (Confidence: @($"{extractedData.ConfidenceScore:P0}"))</h5>
+            </div>
+            <div class="card-body">
+                <h6>Lab Values</h6>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Test</th>
+                            <th>Value</th>
+                            <th>Reference</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var lab in extractedData.ExtractedData.LabValues)
+                        {
+                            <tr class="@GetRowClass(lab)">
+                                <td>@lab.TestName</td>
+                                <td>@lab.Value @lab.Unit</td>
+                                <td>@lab.ReferenceLow - @lab.ReferenceHigh</td>
+                                <td>
+                                    <span class="badge @GetBadgeClass(lab)">
+                                        @lab.Interpretation
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @if (temporalProfile != null)
+    {
+        <!-- Temporal Analysis -->
+        <div class="card mb-4 border-info">
+            <div class="card-header bg-info text-white">
+                <h5>⏱️ Temporal Analysis</h5>
+            </div>
+            <div class="card-body">
+                <h6>Trends</h6>
+                @foreach (var trend in temporalProfile.Trends)
+                {
+                    <div class="alert @GetTrendAlertClass(trend.Direction)">
+                        <strong>@trend.VariableName</strong>: 
+                        @trend.Direction trend 
+                        (slope: @trend.Slope:F3, 
+                        volatility: @trend.Volatility:F2)
+                    </div>
+                }
+
+                @if (temporalProfile.DetectedAnomalies.Any())
+                {
+                    <h6 class="mt-3">⚠️ Detected Anomalies</h6>
+                    @foreach (var anomaly in temporalProfile.DetectedAnomalies)
+                    {
+                        <div class="alert alert-warning">
+                            <strong>@anomaly.VariableName</strong> at @anomaly.Timestamp<br/>
+                            @anomaly.Explanation
+                        </div>
+                    }
+                }
+
+                <h6 class="mt-3">🔮 Predictions</h6>
+                @foreach (var traj in temporalProfile.Trajectories)
+                {
+                    <div class="mb-3">
+                        <strong>@traj.Key</strong> 
+                        (Confidence: @($"{traj.Value.Confidence:P0}"))
+                        <ul>
+                            @foreach (var state in traj.Value.PredictedStates)
+                            {
+                                <li>
+                                    @state.ProjectedDate.ToString("MMM yyyy"): 
+                                    @state.ExpectedValue:F2 
+                                    (@($"{state.Probability:P0}") probability)
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (causalGraph != null)
+    {
+        <!-- Causal Graph Visualization -->
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5>🕸️ Causal Reasoning Graph</h5>
+            </div>
+            <div class="card-body">
+                <div id="causalGraph" style="height: 400px; border: 1px solid #ddd;"></div>
+                
+                <h6 class="mt-4">Causal Chains</h6>
+                @foreach (var node in causalGraph.Nodes.Where(n => n.Type == NodeType.RootCause))
+                {
+                    <div class="mb-2">
+                        <span class="badge bg-danger">Root</span>
+                        <strong>@node.Label</strong> 
+                        (@($"{node.Probability:P0}") confidence)
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (suggestion != null)
+    {
+        <!-- Clinical Suggestions -->
+        <div class="card mb-4 border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5>💡 Clinical Suggestions</h5>
+                <span class="badge @GetPriorityBadge(suggestion.Priority)">
+                    @suggestion.Priority Priority
+                </span>
+            </div>
+            <div class="card-body">
+                <h6>Simple Explanation</h6>
+                <p class="lead">@suggestion.SimplifiedExplanation</p>
+                
+                <h6>Supporting Evidence</h6>
+                <ul>
+                    @foreach (var evidence in suggestion.SupportingEvidence)
+                    {
+                        <li>@evidence</li>
+                    }
+                </ul>
+
+                <h6>What-If Scenarios</h6>
+                @foreach (var cf in suggestion.Counterfactuals)
+                {
+                    <div class="card mb-2">
+                        <div class="card-body">
+                            <h6 class="card-subtitle mb-2 text-muted">@cf.Scenario</h6>
+                            <p class="card-text">@cf.OutcomeDifference</p>
+                            <span class="badge @(cf.ProbabilityChange < 0 ? "bg-success" : "bg-danger")">
+                                @(cf.ProbabilityChange > 0 ? "+" : "")@($"{cf.ProbabilityChange:P0}") risk
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isUploading = false;
+    private MedicalRecord? extractedData;
+    private TemporalProfile? temporalProfile;
+    private CausalGraph? causalGraph;
+    private ClinicalSuggestion? suggestion;
+    private Guid currentPatientId = Guid.NewGuid(); // Demo patient
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isUploading = true;
+        
+        try
+        {
+            var file = e.File;
+            using var content = new MultipartFormDataContent();
+            using var fileStream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var streamContent = new StreamContent(fileStream);
+            content.Add(streamContent, "file", file.Name);
+
+            // Upload and extract
+            var response = await Http.PostAsync(
+                $"api/patients/{currentPatientId}/upload", 
+                content);
+            
+            extractedData = await response.Content
+                .ReadFromJsonAsync<MedicalRecord>();
+
+            // Load temporal analysis
+            await LoadTemporalAnalysis();
+            
+            // Load causal graph
+            await LoadCausalGraph();
+            
+            // Load suggestions
+            await LoadSuggestions();
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task LoadTemporalAnalysis()
+    {
+        temporalProfile = await Http.GetFromJsonAsync<TemporalProfile>(
+            $"api/patients/{currentPatientId}/temporal-analysis");
+    }
+
+    private async Task LoadCausalGraph()
+    {
+        causalGraph = await Http.GetFromJsonAsync<CausalGraph>(
+            $"api/patients/{currentPatientId}/causal-graph?target=overall_health");
+        
+        // Render graph using JavaScript interop
+        if (causalGraph != null)
+        {
+            await JS.InvokeVoidAsync("renderCausalGraph", causalGraph);
+        }
+    }
+
+    private async Task LoadSuggestions()
+    {
+        suggestion = await Http.GetFromJsonAsync<ClinicalSuggestion>(
+            $"api/patients/{currentPatientId}/suggestions");
+    }
+
+    private string GetRowClass(LabValue lab) => lab.Interpretation switch
+    {
+        "High" => "table-danger",
+        "Low" => "table-warning",
+        _ => ""
+    };
+
+    private string GetBadgeClass(LabValue lab) => lab.Interpretation switch
+    {
+        "High" => "bg-danger",
+        "Low" => "bg-warning text-dark",
+        _ => "bg-success"
+    };
+
+    private string GetTrendAlertClass(TrendDirection dir) => dir switch
+    {
+        TrendDirection.Worsening => "alert-danger",
+        TrendDirection.Improving => "alert-success",
+        TrendDirection.Fluctuating => "alert-warning",
+        _ => "alert-info"
+    };
+
+    private string GetPriorityBadge(SuggestionPriority priority) => priority switch
+    {
+        SuggestionPriority.Critical => "bg-danger",
+        SuggestionPriority.High => "bg-warning text-dark",
+        SuggestionPriority.Medium => "bg-info",
+        _ => "bg-secondary"
+    };
+}
