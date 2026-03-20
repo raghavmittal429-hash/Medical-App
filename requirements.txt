@@ -1,0 +1,1 @@
+-r frontend-streamlit/requirements.txt
