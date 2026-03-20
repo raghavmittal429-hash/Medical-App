@@ -42,22 +42,43 @@ public class PatientsController : ControllerBase
     [HttpGet("{patientId:guid}/temporal-analysis")]
     public async Task<ActionResult<TemporalProfile>> GetTemporalAnalysis(Guid patientId)
     {
-        var profile = await _orchestrator.GetTemporalProfileAsync(patientId);
-        return Ok(profile);
+        try
+        {
+            var profile = await _orchestrator.GetTemporalProfileAsync(patientId);
+            return Ok(profile);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpGet("{patientId:guid}/causal-graph")]
     public async Task<ActionResult<CausalGraph>> GetCausalGraph(Guid patientId, [FromQuery] string target = "current_condition")
     {
-        var graph = await _orchestrator.GetCausalGraphAsync(patientId, target);
-        return Ok(graph);
+        try
+        {
+            var graph = await _orchestrator.GetCausalGraphAsync(patientId, target);
+            return Ok(graph);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpGet("{patientId:guid}/suggestions")]
     public async Task<ActionResult<ClinicalSuggestion>> GetSuggestions(Guid patientId)
     {
-        var suggestion = await _orchestrator.GetSuggestionAsync(patientId);
-        return Ok(suggestion);
+        try
+        {
+            var suggestion = await _orchestrator.GetSuggestionAsync(patientId);
+            return Ok(suggestion);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPost("simplify")]

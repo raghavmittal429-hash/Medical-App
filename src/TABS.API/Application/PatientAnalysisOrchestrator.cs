@@ -63,19 +63,19 @@ public class PatientAnalysisOrchestrator : IPatientAnalysisOrchestrator
 
     public async Task<TemporalProfile> GetTemporalProfileAsync(Guid patientId)
     {
-        await EnsurePatientAsync(patientId);
+        await EnsurePatientHasRecordsAsync(patientId);
         return await _temporalService.AnalyzePatientHistoryAsync(patientId);
     }
 
     public async Task<CausalGraph> GetCausalGraphAsync(Guid patientId, string target)
     {
-        await EnsurePatientAsync(patientId);
+        await EnsurePatientHasRecordsAsync(patientId);
         return await _causalService.BuildCausalGraphAsync(patientId, target);
     }
 
     public async Task<ClinicalSuggestion> GetSuggestionAsync(Guid patientId)
     {
-        await EnsurePatientAsync(patientId);
+        await EnsurePatientHasRecordsAsync(patientId);
 
         var temporalProfile = await _temporalService.AnalyzePatientHistoryAsync(patientId);
         var causalGraph = await _causalService.BuildCausalGraphAsync(patientId, "health_optimization");
@@ -109,5 +109,15 @@ public class PatientAnalysisOrchestrator : IPatientAnalysisOrchestrator
 
         await _patientRepository.AddAsync(patient);
         return patient;
+    }
+
+    private async Task EnsurePatientHasRecordsAsync(Guid patientId)
+    {
+        var patient = await EnsurePatientAsync(patientId);
+        if (patient.MedicalHistory.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No medical records uploaded for this patient. Upload at least one report before running analysis.");
+        }
     }
 }
