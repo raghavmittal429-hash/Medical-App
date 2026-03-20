@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TABS.API/TABS.API.csproj" />
+    <Project Path="src/TABS.Causal/TABS.Causal.csproj" />
+    <Project Path="src/TABS.Core/TABS.Core.csproj" />
+    <Project Path="src/TABS.NLP/TABS.NLP.csproj" />
+    <Project Path="src/TABS.OCR/TABS.OCR.csproj" />
+    <Project Path="src/TABS.Temporal/TABS.Temporal.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TABS.Tests/TABS.Tests.csproj" />
+  </Folder>
+</Solution>

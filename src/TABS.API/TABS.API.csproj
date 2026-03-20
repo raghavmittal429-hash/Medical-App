@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TABS.Core\TABS.Core.csproj" />
+    <ProjectReference Include="..\TABS.OCR\TABS.OCR.csproj" />
+    <ProjectReference Include="..\TABS.NLP\TABS.NLP.csproj" />
+    <ProjectReference Include="..\TABS.Temporal\TABS.Temporal.csproj" />
+    <ProjectReference Include="..\TABS.Causal\TABS.Causal.csproj" />
+  </ItemGroup>
+
+</Project>

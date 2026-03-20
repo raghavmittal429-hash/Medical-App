@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "47z936DfMC4=",
+  "success": true,
+  "projectFilePath": "/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.API/TABS.API.csproj",
+  "expectedPackageFiles": [
+    "/Users/anant/.nuget/packages/microsoft.aspnetcore.openapi/10.0.5/microsoft.aspnetcore.openapi.10.0.5.nupkg.sha512",
+    "/Users/anant/.nuget/packages/microsoft.openapi/2.0.0/microsoft.openapi.2.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

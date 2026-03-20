@@ -1,0 +1,56 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "TABS.Causal/1.0.0": {
+        "dependencies": {
+          "TABS.Core": "1.0.0",
+          "TABS.Temporal": "1.0.0"
+        },
+        "runtime": {
+          "TABS.Causal.dll": {}
+        }
+      },
+      "TABS.Core/1.0.0": {
+        "runtime": {
+          "TABS.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "TABS.Temporal/1.0.0": {
+        "dependencies": {
+          "TABS.Core": "1.0.0"
+        },
+        "runtime": {
+          "TABS.Temporal.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "TABS.Causal/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "TABS.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "TABS.Temporal/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

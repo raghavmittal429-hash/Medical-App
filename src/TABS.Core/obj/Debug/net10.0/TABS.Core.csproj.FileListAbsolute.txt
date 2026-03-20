@@ -1,0 +1,12 @@
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/bin/Debug/net10.0/TABS.Core.deps.json
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/bin/Debug/net10.0/TABS.Core.dll
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/bin/Debug/net10.0/TABS.Core.pdb
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/TABS.Core.GeneratedMSBuildEditorConfig.editorconfig
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/TABS.Core.AssemblyInfoInputs.cache
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/TABS.Core.AssemblyInfo.cs
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/TABS.Core.csproj.CoreCompileInputs.cache
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/TABS.Core.sourcelink.json
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/TABS.Core.dll
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/refint/TABS.Core.dll
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/TABS.Core.pdb
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Core/obj/Debug/net10.0/ref/TABS.Core.dll

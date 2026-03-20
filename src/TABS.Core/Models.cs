@@ -1,0 +1,225 @@
+namespace TABS.Core.Models;
+
+public class Patient
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = string.Empty;
+    public DateTime DateOfBirth { get; set; }
+    public string PreferredLanguage { get; set; } = "en";
+    public List<MedicalRecord> MedicalHistory { get; set; } = new();
+    public TemporalProfile TemporalProfile { get; set; } = new();
+}
+
+public class MedicalRecord
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid PatientId { get; set; }
+    public DateTime RecordDate { get; set; }
+    public RecordType Type { get; set; }
+    public string RawContent { get; set; } = string.Empty;
+    public StructuredData ExtractedData { get; set; } = new();
+    public double ConfidenceScore { get; set; }
+    public string SourceDocumentUrl { get; set; } = string.Empty;
+}
+
+public enum RecordType
+{
+    LabReport,
+    Prescription,
+    Imaging,
+    ClinicalNotes,
+    VitalSigns
+}
+
+public class StructuredData
+{
+    public List<LabValue> LabValues { get; set; } = new();
+    public List<Medication> Medications { get; set; } = new();
+    public List<Diagnosis> Diagnoses { get; set; } = new();
+    public List<Symptom> Symptoms { get; set; } = new();
+    public Dictionary<string, string> Metadata { get; set; } = new();
+}
+
+public class LabValue
+{
+    public string TestName { get; set; } = string.Empty;
+    public string NormalizedName { get; set; } = string.Empty;
+    public double Value { get; set; }
+    public string Unit { get; set; } = string.Empty;
+    public double? ReferenceLow { get; set; }
+    public double? ReferenceHigh { get; set; }
+    public string Interpretation { get; set; } = string.Empty;
+    public DateTime TestDate { get; set; }
+}
+
+public class Medication
+{
+    public string Name { get; set; } = string.Empty;
+    public string Dosage { get; set; } = string.Empty;
+    public string Frequency { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+}
+
+public class Diagnosis
+{
+    public string Code { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public DateTime DateDiagnosed { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class Symptom
+{
+    public string Name { get; set; } = string.Empty;
+    public Severity Severity { get; set; }
+    public DateTime OnsetDate { get; set; }
+    public bool IsPresent { get; set; }
+}
+
+public enum Severity
+{
+    Mild,
+    Moderate,
+    Severe,
+    Critical
+}
+
+public class TemporalProfile
+{
+    public List<TemporalTrend> Trends { get; set; } = new();
+    public List<Anomaly> DetectedAnomalies { get; set; } = new();
+    public Dictionary<string, Trajectory> Trajectories { get; set; } = new();
+}
+
+public class TemporalTrend
+{
+    public string VariableName { get; set; } = string.Empty;
+    public TrendDirection Direction { get; set; }
+    public double Slope { get; set; }
+    public double Volatility { get; set; }
+    public DateTime WindowStart { get; set; }
+    public DateTime WindowEnd { get; set; }
+    public List<DataPoint> DataPoints { get; set; } = new();
+}
+
+public class DataPoint
+{
+    public DateTime Timestamp { get; set; }
+    public double Value { get; set; }
+    public double? ConfidenceIntervalLower { get; set; }
+    public double? ConfidenceIntervalUpper { get; set; }
+}
+
+public enum TrendDirection
+{
+    Improving,
+    Worsening,
+    Stable,
+    Fluctuating
+}
+
+public class Anomaly
+{
+    public string VariableName { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+    public double ExpectedValue { get; set; }
+    public double ActualValue { get; set; }
+    public double DeviationScore { get; set; }
+    public string Explanation { get; set; } = string.Empty;
+}
+
+public class Trajectory
+{
+    public string VariableName { get; set; } = string.Empty;
+    public List<PredictedState> PredictedStates { get; set; } = new();
+    public double Confidence { get; set; }
+}
+
+public class PredictedState
+{
+    public DateTime ProjectedDate { get; set; }
+    public double ExpectedValue { get; set; }
+    public double Probability { get; set; }
+    public List<string> ContributingFactors { get; set; } = new();
+}
+
+public class CausalGraph
+{
+    public List<CausalNode> Nodes { get; set; } = new();
+    public List<CausalEdge> Edges { get; set; } = new();
+    public DateTime GeneratedAt { get; set; }
+    public string TargetVariable { get; set; } = string.Empty;
+}
+
+public class CausalNode
+{
+    public string Id { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public NodeType Type { get; set; }
+    public double CurrentValue { get; set; }
+    public double Probability { get; set; }
+    public List<string> Evidence { get; set; } = new();
+}
+
+public enum NodeType
+{
+    RootCause,
+    Intermediate,
+    Outcome,
+    Intervention
+}
+
+public class CausalEdge
+{
+    public string SourceId { get; set; } = string.Empty;
+    public string TargetId { get; set; } = string.Empty;
+    public double Strength { get; set; }
+    public string RelationshipType { get; set; } = string.Empty;
+    public string Explanation { get; set; } = string.Empty;
+}
+
+public class ClinicalSuggestion
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string SimplifiedExplanation { get; set; } = string.Empty;
+    public SuggestionPriority Priority { get; set; }
+    public List<string> SupportingEvidence { get; set; } = new();
+    public CausalGraph CausalReasoning { get; set; } = new();
+    public List<CounterfactualScenario> Counterfactuals { get; set; } = new();
+    public DateTime GeneratedAt { get; set; }
+}
+
+public enum SuggestionPriority
+{
+    Low,
+    Medium,
+    High,
+    Critical
+}
+
+public class CounterfactualScenario
+{
+    public string Scenario { get; set; } = string.Empty;
+    public double ProbabilityChange { get; set; }
+    public string OutcomeDifference { get; set; } = string.Empty;
+}
+
+public class SimplifiedExplanation
+{
+    public string OriginalText { get; set; } = string.Empty;
+    public string SimplifiedText { get; set; } = string.Empty;
+    public List<KeyTerm> KeyTerms { get; set; } = new();
+    public List<string> ActionItems { get; set; } = new();
+    public List<string> RedFlags { get; set; } = new();
+    public double Confidence { get; set; }
+}
+
+public class KeyTerm
+{
+    public string Term { get; set; } = string.Empty;
+    public string SimpleDefinition { get; set; } = string.Empty;
+    public string Analogy { get; set; } = string.Empty;
+}

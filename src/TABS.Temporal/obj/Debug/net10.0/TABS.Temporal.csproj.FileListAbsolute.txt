@@ -1,0 +1,16 @@
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/bin/Debug/net10.0/TABS.Temporal.deps.json
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/bin/Debug/net10.0/TABS.Temporal.dll
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/bin/Debug/net10.0/TABS.Temporal.pdb
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/bin/Debug/net10.0/TABS.Core.dll
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/bin/Debug/net10.0/TABS.Core.pdb
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.csproj.AssemblyReference.cache
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.GeneratedMSBuildEditorConfig.editorconfig
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.AssemblyInfoInputs.cache
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.AssemblyInfo.cs
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.csproj.CoreCompileInputs.cache
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.sourcelink.json
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Tem.5C708F8D.Up2Date
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.dll
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/refint/TABS.Temporal.dll
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/TABS.Temporal.pdb
+/Users/anant/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Projects/raghav-dipesh_project/Medical-App/src/TABS.Temporal/obj/Debug/net10.0/ref/TABS.Temporal.dll
